@@ -234,7 +234,27 @@ EMAIL_RECEIVERS=recipient@example.com
 3. 启用 Actions: `Actions` → `I understand my workflows, go ahead and enable them`
 4. 默认每个工作日 18:00（北京时间）自动执行
 
-### 本地 Cron 定时任务
+### 本地 Cron 定时任务（推荐：使用代理包装脚本）
+
+项目提供了一个开箱即用的 cron 包装脚本 `scripts/daily_analysis_cron.sh`，内置代理设置和日志管理：
+
+```bash
+# 1. 按需修改脚本中的代理地址、股票列表等参数
+vim scripts/daily_analysis_cron.sh
+
+# 2. 手动测试一次
+./scripts/daily_analysis_cron.sh
+
+# 3. 注册 crontab（每个工作日 04:00 执行）
+(crontab -l 2>/dev/null; echo "0 4 * * 1-5 $(pwd)/scripts/daily_analysis_cron.sh") | sort -u | crontab -
+
+# 查看日志
+tail -f logs/cron_$(date +%Y%m%d).log
+```
+
+脚本默认配置：代理 `127.0.0.1:7890`，分析股票 `300750,300308,601777,000989`，`--force-run` 跳过交易日检查。
+
+### 手动配置 Cron（不使用包装脚本）
 
 ```bash
 crontab -e
@@ -326,6 +346,59 @@ uv run main.py --debug
 | `uv run main.py --dry-run` | 干运行（不执行） |
 | `uv run main.py --market-review` | 市场复盘模式 |
 | `uv run main.py --schedule` | 定时任务模式 |
+
+---
+
+## 🔄 与上游仓库同步（Rebase）
+
+如果你是 Fork 了本仓库，想要同步上游的最新改动：
+
+### 一键同步脚本
+
+```bash
+# 配置代理并同步上游最新改动
+git config --global http.proxy http://127.0.0.1:7890 && \
+git config --global https.proxy http://127.0.0.1:7890 && \
+git fetch upstream && \
+git rebase upstream/main && \
+git push --force-with-lease origin main
+```
+
+### 分步执行
+
+```bash
+# 1. 配置代理（如果需要）
+git config --global http.proxy http://127.0.0.1:7890
+git config --global https.proxy http://127.0.0.1:7890
+
+# 2. 获取上游最新改动
+git fetch upstream
+
+# 3. 变基到上游最新分支
+git rebase upstream/main
+
+# 4. 如果有冲突，解决后继续
+git add <resolved_files>
+git rebase --continue
+
+# 5. 推送到你的 Fork
+git push --force-with-lease origin main
+```
+
+### 检查同步状态
+
+```bash
+# 查看本地分支与上游的差异
+git log --oneline --left-right --cherry-pick upstream/main...HEAD
+
+# 查看有哪些新提交
+git log --oneline upstream/main --not main
+```
+
+> 💡 **提示**: 
+> - 如果你没有配置代理，可以跳过 `git config` 步骤
+> - `--force-with-lease` 比 `--force` 更安全，会检查远程分支是否被他人修改
+> - 如果 rebase 过程中遇到冲突，解决后运行 `git rebase --continue`
 
 ---
 
